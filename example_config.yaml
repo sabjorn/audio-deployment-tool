@@ -1,0 +1,20 @@
+all:
+  year: 2025
+  album name: An Album Name
+  artist name: An Artist Name
+  copyright: Some Copywrite Info
+  serial number: 012345
+  composer: The Composer
+  genre: house
+  comment: here's where you add extra notes
+  catalog number: LOL001
+  cover art: some_albumart.png # this can include a path
+
+tracks:
+  1:
+    title: a track title
+    file: track1.aiff
+    comment: individual track data ovewrites master
+  2:
+    title: a second track title
+    file: track2.aiff
