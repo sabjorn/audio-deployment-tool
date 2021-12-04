@@ -1,0 +1,100 @@
+#! /usr/bin/env python3
+import argparse
+import os
+
+from mutagen.id3 import ID3, TRCK, TDRC, TIT2, TALB, TPE1, TPOS, TCON, TCOM, TPOS, TCOP, COMM, TXXX, APIC
+from mutagen.aiff import AIFF
+from yaml import load, dump
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
+
+def get_args():
+    class ValidateConfigFilename(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            if not values.endswith(".yml") and not values.endswith(".yaml"):
+                raise ValueError("input must be an .yml or .yaml")
+            setattr(namespace, self.dest, values)
+
+
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('-c', "--config", type=str, action=ValidateConfigFilename, help='process based on yaml config file')
+    parser.add_argument('-f', "--force", action="store_true", help='force overwrite of tags')
+    parser.add_argument('-v', "--verbose", action="store_true", help='print metadata tags (except cover image)')
+    return parser.parse_args()
+
+
+def add_tags(audio, info, force=False):
+    if audio.tags and not force:
+        raise ValueError("tags already exist and force option is not set to true")
+
+    if audio.tags:
+        audio.tags = None
+
+    audio.add_tags()
+
+    audio.tags.add(TRCK(encoding=3, text=info['track']))
+    audio.tags.add(TDRC(encoding=3, text=info['year']))
+    audio.tags.add(TIT2(encoding=3, text=info['title']))
+    audio.tags.add(TALB(encoding=3, text=info['album name']))
+    audio.tags.add(TPE1(encoding=3, text=info['artist name']))
+    audio.tags.add(TPOS(encoding=3, text=info['serial number']))
+    audio.tags.add(TCON(encoding=3, text=info['genre']))
+    audio.tags.add(TCOM(encoding=3, text=info['composer'])) 
+    audio.tags.add(TCOP(encoding=3, text=info['copyright'])) 
+    audio.tags.add(TXXX(encoding=3, desc=u'CATALOGNUMBER', text=info['catalog number'])) 
+    audio.tags.add(COMM(encoding=3, desc=u'eng', text=info['comment']))
+
+    _, file_extension = os.path.splitext(info['cover art'])
+    with open(info['cover art'], 'rb') as cover:
+        audio.tags.add(APIC(
+                      encoding=3,
+                      mime=f'image/{file_extension[1:]}',
+                      type=3, 
+                      desc=u'Cover',
+                      data=cover.read()
+                    ))
+
+    audio.save()
+
+def print_tags(audio):
+    for key in audio.tags.keys():
+        if "APIC" in key:
+            continue
+        print(key, audio.tags[key])
+
+
+def create_yaml(audio):
+    return ""
+
+if __name__ == '__main__':
+    try:
+        args = get_args()
+    except Exception as e:
+        print(e)
+        exit()
+
+    if(args.config): 
+        with open(args.config, 'r') as stream:
+            config = load(stream, Loader=Loader)
+
+        for track_index in config["tracks"]:
+            info = config["all"].copy()
+            info["track"] = track_index
+
+            track_data = config["tracks"][track_index]
+            file = track_data.pop('file', None)
+            info.update(track_data)
+            
+            info = {k: str(v).encode("utf-8").decode('utf-8') for k,v in info.items()}
+            audio = AIFF(file, v2_version=3)
+            try:
+                add_tags(audio, info, args.force)
+            except Exception as e:
+                print(e)
+                exit()
+            
+            if(args.verbose): 
+                print_tags(audio)      
