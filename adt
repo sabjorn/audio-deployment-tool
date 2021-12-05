@@ -59,15 +59,13 @@ def add_tags(audio, info, force=False):
 
     audio.save()
 
+
 def print_tags(audio):
     for key in audio.tags.keys():
         if "APIC" in key:
             continue
         print(key, audio.tags[key])
 
-
-def create_yaml(audio):
-    return ""
 
 if __name__ == '__main__':
     try:
