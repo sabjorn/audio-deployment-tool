@@ -1,2 +1,2 @@
-mutagen
-pyyaml
+mutagen~=1.45.1
+PyYAML~=5.4.1
