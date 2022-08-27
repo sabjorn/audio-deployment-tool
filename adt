@@ -23,7 +23,7 @@ def get_args():
 
 
     parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-c', "--config", type=str, action=ValidateConfigFilename, help='process based on yaml config file')
+    parser.add_argument('-c', "--config", type=str, required=True, action=ValidateConfigFilename, help='process based on yaml config file')
     parser.add_argument('-o', "--output", type=str, default="./", help='location to copy audio files to')
     parser.add_argument('-r', "--resize", type=int, help='pixels (width/height) to resize input image before adding to metadata. For CDJ2000NX, the maximum resolution is 800x800. If left blank, original image will be used')
     parser.add_argument('-v', "--verbose", action="store_true", help='print metadata tags (except cover image)')
@@ -76,39 +76,38 @@ if __name__ == '__main__':
         print(e)
         exit()
 
-    if(args.config):
-        with open(args.config, 'r') as stream:
-            config = load(stream, Loader=Loader)
+    with open(args.config, 'r') as stream:
+        config = load(stream, Loader=Loader)
+
+    img = Image.open(config["all"]['cover art']).convert('RGB')
+    if args.resize:
+        img = img.resize((args.resize, args.resize))
+
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='JPEG')
+    album_art = img_byte_arr.getvalue()
+
+    for track_index in config["tracks"]:
+        info = config["all"].copy()
+        info["track"] = track_index
+
+        track_data = config["tracks"][track_index]
+        file = track_data.pop('file', None)
+        info.update(track_data)
+
+        os.makedirs(args.output, exist_ok=True) 
+        output_file = f"{info['catalog number']}_{track_index:02}_{info['artist name']}_-_{info['title']}.aiff"
+        output_file = output_file.replace(" ", "_")
+        output_file = os.path.join(args.output, output_file)
+        shutil.copy2(file, output_file)
+
+        info = {k: str(v).encode("utf-8").decode('utf-8') for k,v in info.items()}
+        audio = AIFF(output_file, v2_version=3)
+        try:
+            add_tags(audio, info, album_art)
+        except Exception as e:
+            print(e)
+            exit()
         
-        img = Image.open(config["all"]['cover art']).convert('RGB')
-        if(args.resize):
-            img = img.resize((args.resize, args.resize))
-
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG')
-        album_art = img_byte_arr.getvalue()
-        
-        for track_index in config["tracks"]:
-            info = config["all"].copy()
-            info["track"] = track_index
-
-            track_data = config["tracks"][track_index]
-            file = track_data.pop('file', None)
-            info.update(track_data)
-
-            os.makedirs(args.output, exist_ok=True) 
-            output_file = f"{info['catalog number']}_{track_index:02}_{info['artist name']}_-_{info['title']}.aiff"
-            output_file = output_file.replace(" ", "_")
-            output_file = os.path.join(args.output, output_file)
-            shutil.copy2(file, output_file)
-
-            info = {k: str(v).encode("utf-8").decode('utf-8') for k,v in info.items()}
-            audio = AIFF(output_file, v2_version=3)
-            try:
-                add_tags(audio, info, album_art)
-            except Exception as e:
-                print(e)
-                exit()
-            
-            if(args.verbose): 
-                print_tags(audio)
+        if(args.verbose): 
+            print_tags(audio)
