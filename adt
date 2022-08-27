@@ -1,8 +1,10 @@
 #! /usr/bin/env python3
 import argparse
 import os
+import io
 import shutil
 
+from PIL import Image
 from mutagen.id3 import ID3, TRCK, TDRC, TIT2, TALB, TPE1, TPOS, TCON, TCOM, TPOS, TCOP, COMM, TXXX, APIC
 from mutagen.aiff import AIFF
 from yaml import load, dump
@@ -21,13 +23,14 @@ def get_args():
 
 
     parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-c', "--config", type=str, action=ValidateConfigFilename, help='process based on yaml config file')
-    parser.add_argument('-o', "--output", type=str, default="./", help='location to copy audio files to, ignored if "--force" is set to true')
+    parser.add_argument('-c', "--config", type=str, required=True, action=ValidateConfigFilename, help='process based on yaml config file')
+    parser.add_argument('-o', "--output", type=str, default="./", help='location to copy audio files to')
+    parser.add_argument('-r', "--resize", type=int, help='pixels (width/height) to resize input image before adding to metadata. For CDJ2000NX, the maximum resolution is 800x800. If left blank, original image will be used')
     parser.add_argument('-v', "--verbose", action="store_true", help='print metadata tags (except cover image)')
     return parser.parse_args()
 
 
-def add_tags(audio, info, force=False):
+def add_tags(audio, info, album_art, force=False):
     if audio.tags and not force:
         raise ValueError("tags already exist and force option is not set to true")
 
@@ -48,15 +51,13 @@ def add_tags(audio, info, force=False):
     audio.tags.add(TXXX(encoding=3, desc=u'CATALOGNUMBER', text=info['catalog number'])) 
     audio.tags.add(COMM(encoding=3, desc=u'eng', text=info['comment']))
 
-    _, file_extension = os.path.splitext(info['cover art'])
-    with open(info['cover art'], 'rb') as cover:
-        audio.tags.add(APIC(
-                      encoding=3,
-                      mime=f'image/{file_extension[1:]}',
-                      type=3, 
-                      desc=u'Cover',
-                      data=cover.read()
-                    ))
+    audio.tags.add(APIC(
+                  encoding=3,
+                  mime='image/jpeg',
+                  type=3,
+                  desc=u'Cover',
+                  data=album_art
+                ))
 
     audio.save()
 
@@ -75,31 +76,38 @@ if __name__ == '__main__':
         print(e)
         exit()
 
-    if(args.config): 
-        with open(args.config, 'r') as stream:
-            config = load(stream, Loader=Loader)
+    with open(args.config, 'r') as stream:
+        config = load(stream, Loader=Loader)
 
-        for track_index in config["tracks"]:
-            info = config["all"].copy()
-            info["track"] = track_index
+    img = Image.open(config["all"]['cover art']).convert('RGB')
+    if args.resize:
+        img = img.resize((args.resize, args.resize))
 
-            track_data = config["tracks"][track_index]
-            file = track_data.pop('file', None)
-            info.update(track_data)
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='JPEG')
+    album_art = img_byte_arr.getvalue()
 
-            os.makedirs(args.output, exist_ok=True) 
-            output_file = f"{info['catalog number']}_{track_index:02}_{info['artist name']}_-_{info['title']}.aiff"
-            output_file = output_file.replace(" ", "_")
-            output_file = os.path.join(args.output, output_file)
-            shutil.copy2(file, output_file)
+    for track_index in config["tracks"]:
+        info = config["all"].copy()
+        info["track"] = track_index
 
-            info = {k: str(v).encode("utf-8").decode('utf-8') for k,v in info.items()}
-            audio = AIFF(output_file, v2_version=3)
-            try:
-                add_tags(audio, info)
-            except Exception as e:
-                print(e)
-                exit()
-            
-            if(args.verbose): 
-                print_tags(audio)
+        track_data = config["tracks"][track_index]
+        file = track_data.pop('file', None)
+        info.update(track_data)
+
+        os.makedirs(args.output, exist_ok=True) 
+        output_file = f"{info['catalog number']}_{track_index:02}_{info['artist name']}_-_{info['title']}.aiff"
+        output_file = output_file.replace(" ", "_")
+        output_file = os.path.join(args.output, output_file)
+        shutil.copy2(file, output_file)
+
+        info = {k: str(v).encode("utf-8").decode('utf-8') for k,v in info.items()}
+        audio = AIFF(output_file, v2_version=3)
+        try:
+            add_tags(audio, info, album_art)
+        except Exception as e:
+            print(e)
+            exit()
+        
+        if(args.verbose): 
+            print_tags(audio)
