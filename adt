@@ -5,7 +5,7 @@ import io
 import shutil
 
 from PIL import Image
-from mutagen.id3 import ID3, TRCK, TDRC, TIT2, TALB, TPE1, TPOS, TCON, TCOM, TPOS, TCOP, COMM, TXXX, APIC
+from mutagen.id3 import ID3, TRCK, TDRC, TIT2, TALB, TPE1, TPOS, TCON, TCOM, TPOS, TCOP, COMM, TXXX, APIC, TPE4
 from mutagen.aiff import AIFF
 from yaml import load, dump
 try:
@@ -51,6 +51,10 @@ def add_tags(audio, info, album_art, force=False):
     audio.tags.add(TCOP(encoding=3, text=info['copyright'])) 
     audio.tags.add(TXXX(encoding=3, desc=u'CATALOGNUMBER', text=info['catalog number'])) 
     audio.tags.add(COMM(encoding=3, desc=u'eng', text=info['comment']))
+
+    remixer = info.get('remixer') 
+    if(remixer):
+       audio.tags.add(TPE4(encoding=3, text=remixer))
 
     audio.tags.add(APIC(
                   encoding=3,

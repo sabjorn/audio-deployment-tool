@@ -18,3 +18,4 @@ tracks:
   2:
     title: a second track title
     file: track2.aiff
+    remixer: dataist # optional
